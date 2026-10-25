@@ -1,21 +1,11 @@
 #!/usr/bin/bash
 # Runs as root INSIDE the guest (streamed over ssh by provision.sh).
-# Installs the Workstation environment and configures an unattended,
-# autologin, accessibility-enabled GNOME Wayland session for "tester".
+# Part 2 of 2: configure an unattended, autologin, accessibility-enabled GNOME
+# Wayland session for "tester". Idempotent; `provision.sh --reconfigure` re-runs
+# only this on top of the existing base image.
 set -euxo pipefail
 U=tester
 export LC_ALL=C.UTF-8
-
-# --- packages ---------------------------------------------------------------
-dnf -y upgrade --refresh
-dnf -y install @workstation-product-environment python3-evdev python3-dogtail python3-pyatspi \
-    --setopt=install_weak_deps=True --skip-unavailable \
-    || dnf -y group install workstation-product-environment
-# Things the harness itself needs (python3-gobject/gtk4/at-spi2-core normally
-# come with the environment; asking again is harmless).
-dnf -y install --skip-unavailable python3-evdev python3-gobject gtk4 at-spi2-core \
-    libinput-utils policycoreutils tar glibc-langpack-en
-rpm -q python3-evdev python3-gobject gtk4 at-spi2-core gdm gnome-shell gnome-control-center mutter
 
 # --- boot target, login manager --------------------------------------------
 systemctl set-default graphical.target
@@ -105,6 +95,19 @@ dconf update
 touch /etc/cloud/cloud-init.disabled
 install -d /var/lib/extensions
 restorecon -R /home/$U /etc /var/lib/extensions 2>/dev/null || true
+
+# --- GSettings schemas ------------------------------------------------------
+# Seen on the Fedora 45 Beta + updates mix: after the big dnf transaction
+# gschemas.compiled was stale (46 of 125 schemas, no org.gnome.SessionManager),
+# so gnome-session aborted ("schema is not installed") and GDM gave up.
+# desktop-backgrounds-gnome overrides org.gnome.desktop.screensaver
+# picture-uri-dark, which gsettings-desktop-schemas no longer has, so a
+# --strict compile exits with an error; a plain compile ignores the override.
+glib-compile-schemas /usr/share/glib-2.0/schemas 2>&1 | { while read -r l; do case "$l" in *deprecated*) ;; *) echo "$l";; esac; done; } || true
+gsettings list-schemas | { while read -r s; do [ "$s" = org.gnome.SessionManager ] && exit 0; done; exit 1; } \
+    || { echo "org.gnome.SessionManager schema still missing" >&2; exit 1; }
+chmod 0644 /usr/share/glib-2.0/schemas/gschemas.compiled
+restorecon /usr/share/glib-2.0/schemas/gschemas.compiled 2>/dev/null || true
 
 rpm -qa --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n' | sort >/var/tmp/e2e-packages.txt
 cat /etc/os-release >/var/tmp/e2e-os-release.txt

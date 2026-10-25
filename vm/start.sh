@@ -5,7 +5,8 @@
 #   vm/start.sh
 #
 # Env: E2E_SSH_PORT (2222), E2E_CPUS (4), E2E_MEM (6G), E2E_RES_X/Y (1280x800),
-# E2E_BOOT_TIMEOUT (300 s), E2E_ACCEL (kvm|tcg).
+# E2E_BOOT_TIMEOUT (300 s), E2E_ACCEL (kvm|tcg), E2E_KEEP_ON_FAIL=1 (leave a
+# VM whose session did not come up running, for debugging).
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
@@ -33,7 +34,8 @@ log "sshd up after $((SECONDS - t0)) s; waiting for GNOME Shell"
 if ! wait_for_shell "$E2E_BOOT_TIMEOUT"; then
     tail -n 30 "$E2E_SERIAL_LOG" >&2
     vm_ssh 'sudo systemctl status gdm --no-pager -l | tail -n 25; sudo journalctl -b -u gdm --no-pager | tail -n 25' >&2 || true
-    qemu_quit; die "GNOME Shell did not come up within ${E2E_BOOT_TIMEOUT}s"
+    [[ -n ${E2E_KEEP_ON_FAIL:-} ]] || qemu_quit
+    die "GNOME Shell did not come up within ${E2E_BOOT_TIMEOUT}s"
 fi
 log "GNOME Shell is up after $((SECONDS - t0)) s"
 

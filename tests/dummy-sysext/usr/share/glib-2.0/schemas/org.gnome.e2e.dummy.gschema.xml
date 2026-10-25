@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.e2e.dummy" path="/org/gnome/e2e/dummy/">
+    <key name="flag" type="b">
+      <default>true</default>
+      <summary>Dummy flag</summary>
+      <description>Only exists to prove that install-sysext.sh recompiles schemas.</description>
+    </key>
+  </schema>
+</schemalist>
