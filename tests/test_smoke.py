@@ -77,50 +77,52 @@ class Smoke(E2ETestCase):
         self.wait_gs("secondary-click-enabled", "false")
         self.settings("close", check=False)
 
-    def _hold_and_find_pie(self, button_label):
-        """Press, poll screenshots until the pie shows around the pointer,
-        release. Returns (baseline, mid_hold, diff, pointer)."""
+    def pie_check(self, delay, hold_s, label):
+        """Press, wait for the shell's pie timer to show up around the
+        pointer, keep holding to *hold_s* seconds, take the mid-hold
+        screenshot, release. Returns (baseline, mid_hold, diff, pointer)."""
         self.start_probe()
         px, py = self.center_pointer()
+        sy = self.screen_y(py)  # surface -> screen (top bar offset)
         base = self.settled_screenshot()
-        n = self.probe.mark()
         self.ctx.mouse.press()
         t_press = time.monotonic()
-        found = {}
-
-        def pie():
-            img = self.ctx.screendump()
-            d = diff_region(base, img, ignore_top=TOP_BAR_PX)
-            found["img"], found["diff"] = img, d
-            return d["count"] > 150 and d["bbox"] is not None
-
         try:
-            G.wait_until(pie, 4.0, 0.05, f"{button_label} pie timer on screen")
+            def pie():
+                d = diff_region(base, self.ctx.screendump(), ignore_top=TOP_BAR_PX)
+                return d if d["count"] > 100 else None
+
+            G.wait_until(pie, delay, 0.05, f"{label} pie timer on screen")
+            seen = time.monotonic() - t_press
+            # The remaining part of the deliberate hold.
+            time.sleep(max(0.0, hold_s - (time.monotonic() - t_press)))
+            mid = self.ctx.screendump()
+            d = diff_region(base, mid, ignore_top=TOP_BAR_PX)
         finally:
-            t_seen = time.monotonic() - t_press
             self.ctx.mouse.release()
         with open(os.path.join(self.art, "mid-hold.png"), "wb") as f:
-            f.write(found["img"].to_png())
-        return base, found["img"], found["diff"], (px, py), t_seen
+            f.write(mid.to_png())
+        x0, y0, x1, y1 = d["bbox"]
+        with open(os.path.join(self.art, "pie.txt"), "w") as f:
+            f.write(f"pointer(screen)=({px},{sy}) bbox={d['bbox']} size=({x1 - x0 + 1},{y1 - y0 + 1}) "
+                    f"pixels={d['count']} first_seen_after={seen:.2f}s hold={hold_s}s\n")
+        # The pie is a small disc centred on the pointer: everything that
+        # changed lies within its radius and the box reaches the pointer.
+        r = 50
+        self.assertGreaterEqual(x0, px - r, d)
+        self.assertLessEqual(x1, px + r, d)
+        self.assertGreaterEqual(y0, sy - r, d)
+        self.assertLessEqual(y1, sy + r, d)
+        self.assertTrue(x0 <= px + 4 and x1 >= px - 4 and y0 <= sy + 4 and y1 >= sy - 4,
+                        f"change {d['bbox']} does not touch the pointer ({px},{sy})")
+        return base, mid, d, (px, sy)
 
     def test_secondary_click_pie_timer(self):
         """Reference for the pie check: with simulated secondary click on,
         a held button makes the shell draw a pie around the pointer."""
         self.gs_set("secondary-click-enabled", "true")
         self.gs_set("secondary-click-time", "2.0")
-        base, mid, d, (px, py), t_seen = self._hold_and_find_pie("secondary click")
-        x0, y0, x1, y1 = d["bbox"]
-        # The pie is a small widget centred on the pointer. Surface coords
-        # of the maximized probe window start below the top bar; allow for it.
-        w, h = x1 - x0 + 1, y1 - y0 + 1
-        with open(os.path.join(self.art, "pie.txt"), "w") as f:
-            f.write(f"pointer(surface)=({px},{py}) bbox={d['bbox']} size=({w},{h}) "
-                    f"pixels={d['count']} seen_after={t_seen:.2f}s\n")
-        self.assertLess(w, 300, d)
-        self.assertLess(h, 300, d)
-        cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
-        self.assertLess(abs(cx - px), 80, f"pie centre {cx},{cy} far from pointer {px},{py}")
-        self.assertLess(abs(cy - py), 120, f"pie centre {cx},{cy} far from pointer {px},{py}")
+        base, mid, d, _ = self.pie_check(2.0, 1.0, "secondary click")
         # After the early release the pie goes away again.
         G.wait_until(lambda: diff_region(base, self.ctx.screendump(),
                                          ignore_top=TOP_BAR_PX)["count"] < 50,

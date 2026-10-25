@@ -208,6 +208,14 @@ class E2ETestCase(unittest.TestCase):
             m.move(int(dx), int(dy))
         raise AssertionError(f"could not center the pointer, last seen at {self.probe.last_pointer()}")
 
+    def screen_y(self, surface_y):
+        """Surface y of the maximized probe window -> screen y (the shell's
+        top bar sits above the window)."""
+        return surface_y + (self.screen_height() - self.layout[1])
+
+    def screen_height(self):
+        return self.ctx.screendump().height
+
     def sentinel(self):
         """Nudge the pointer and wait until the probe has seen that motion:
         every event emitted earlier is then already in the log (events are

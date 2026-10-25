@@ -120,6 +120,11 @@ touch /etc/cloud/cloud-init.disabled
 install -d /var/lib/extensions
 restorecon -R /home/$U /etc /var/lib/extensions 2>/dev/null || true
 
+# --- SELinux policy store ---------------------------------------------------
+# After the pcre2 upgrade the cached file_contexts.bin no longer loads
+# ("Regex version mismatch" noise from setfiles/matchpathcon); rebuild it.
+semodule -B || true
+
 # --- GSettings schemas ------------------------------------------------------
 # Seen on the Fedora 45 Beta + updates mix: after the big dnf transaction
 # gschemas.compiled was stale (46 of 125 schemas, no org.gnome.SessionManager),
