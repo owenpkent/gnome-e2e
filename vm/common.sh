@@ -84,7 +84,7 @@ vm_scp() {
 
 # Wait until sshd answers, up to $1 seconds.
 wait_for_ssh() {
-    local timeout=${1:-120} deadline=$((SECONDS + ${1:-120}))
+    local deadline=$((SECONDS + ${1:-120}))
     while (( SECONDS < deadline )); do
         if vm_ssh true 2>/dev/null; then return 0; fi
         sleep 2
@@ -112,8 +112,7 @@ exit 6
 
 # Wait for the GNOME Shell session of tester, up to $1 seconds.
 wait_for_shell() {
-    local timeout=${1:-$E2E_BOOT_TIMEOUT} deadline=$((SECONDS + ${1:-$E2E_BOOT_TIMEOUT}))
-    local rc=0
+    local deadline=$((SECONDS + ${1:-$E2E_BOOT_TIMEOUT}))
     while (( SECONDS < deadline )); do
         if vm_ssh bash -s <<<"$GUEST_SHELL_UP_SCRIPT" 2>/dev/null; then return 0; fi
         sleep 2

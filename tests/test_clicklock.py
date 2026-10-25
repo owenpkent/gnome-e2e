@@ -82,11 +82,15 @@ class ClickLock(E2ETestCase):
                          f"expected the press without a release, got {ev}")
 
         m = self.probe.mark()
-        self.ctx.mouse.move(200, 0)
-        G.wait_until(lambda: len(self.events(m, "motion")) >= 5, 10, 0.1, "drag motion events")
+        x_before, _ = self.probe.last_pointer()
+        # 200 px over ~0.4 s so that the client gets several motion events
+        # (GTK compresses motion to one event per frame).
+        self.ctx.mouse.move(200, 0, steps=20, delay_ms=20)
+        G.wait_until(lambda: len(self.events(m, "motion")) >= 3, 10, 0.1, "drag motion events")
         self.sentinel()
         motions = self.events(m, "motion")
-        self.assertGreaterEqual(len(motions), 5)
+        self.assertGreaterEqual(len(motions), 3)
+        self.assertGreaterEqual(max(e["x"] for e in motions) - x_before, 150, motions)
         self.assertTrue(all(e["b1"] for e in motions),
                         f"motion without BUTTON1_MASK while locked: {[e for e in motions if not e['b1']][:3]}")
         self.assertEqual(self.events(m, "release"), [])

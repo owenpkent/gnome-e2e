@@ -13,8 +13,8 @@ Protocol: one command per line on stdin, one reply line on stdout per command:
   err <message>
 
 Commands:
-  move DX DY [STEPS]    relative motion, split into STEPS REL events
-                        (default: one step per ~10 units, 2 ms apart)
+  move DX DY [STEPS [MS]]  relative motion, split into STEPS REL events
+                        (default: one step per ~10 units), MS apart (default 2)
   press [BTN]           button down   (BTN: left|right|middle, default left)
   release [BTN]         button up
   click [BTN]           press, 20 ms, release
@@ -68,7 +68,7 @@ class Mouse:
         self.ui.write(e.EV_KEY, code, value)
         self.ui.syn()
 
-    def move(self, dx, dy, steps=None):
+    def move(self, dx, dy, steps=None, delay_ms=2.0):
         if steps is None:
             steps = max(1, math.ceil(max(abs(dx), abs(dy)) / 10))
         sx = sy = 0
@@ -83,7 +83,7 @@ class Mouse:
                 self.ui.syn()
             sx, sy = tx, ty
             if steps > 1:
-                time.sleep(0.002)
+                time.sleep(delay_ms / 1000.0)
 
     def run(self, line):
         parts = line.split()
@@ -91,7 +91,8 @@ class Mouse:
             return
         cmd, args = parts[0], parts[1:]
         if cmd == "move":
-            self.move(int(args[0]), int(args[1]), int(args[2]) if len(args) > 2 else None)
+            self.move(int(args[0]), int(args[1]), int(args[2]) if len(args) > 2 else None,
+                      float(args[3]) if len(args) > 3 else 2.0)
         elif cmd == "press":
             self.key(self.button(args[0] if args else "left"), 1)
         elif cmd == "release":

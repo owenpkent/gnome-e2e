@@ -25,9 +25,10 @@ class Smoke(E2ETestCase):
                     session=False).stdout
         blocks = [dict(l.split("=", 1) for l in b.splitlines() if "=" in l)
                   for b in sess.split("\n\n")]
-        tester = [b for b in blocks if b.get("Name") == "tester" and b.get("Class") == "user"]
-        self.assertTrue(tester, f"no logind user session for tester: {sess}")
-        self.assertEqual(tester[0].get("Type"), "wayland", tester[0])
+        # (the ssh login of this very test shows up as a "tty" session too)
+        tester = [b for b in blocks if b.get("Name") == "tester" and b.get("Class") == "user"
+                  and b.get("Type") == "wayland"]
+        self.assertTrue(tester, f"no wayland logind session for tester: {sess}")
         self.assertEqual(tester[0].get("Active"), "yes", tester[0])
         self.assertEqual(g.gsettings_get("org.gnome.desktop.interface", "toolkit-accessibility"), "true")
         self.assertEqual(g.gsettings_get("org.gnome.desktop.session", "idle-delay"), "uint32 0")

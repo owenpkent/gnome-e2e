@@ -171,8 +171,13 @@ class Mouse:
         _, a, b = reply.split()
         return int(a), int(b)
 
-    def move(self, dx, dy, steps=None):
-        return self.cmd(f"move {dx} {dy}" + (f" {steps}" if steps else ""))
+    def move(self, dx, dy, steps=None, delay_ms=None):
+        line = f"move {dx} {dy}"
+        if steps is not None or delay_ms is not None:
+            if steps is None:
+                steps = max(1, -(-max(abs(dx), abs(dy)) // 10))
+            line += f" {steps} {2 if delay_ms is None else delay_ms}"
+        return self.cmd(line, timeout=30 + (steps or 1) * (delay_ms or 2) / 1000.0)
 
     def press(self, button="left"):
         return self.cmd(f"press {button}")
