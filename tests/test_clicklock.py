@@ -124,27 +124,57 @@ class ClickLock(E2ETestCase):
 
     # -- (c) pie timer ----------------------------------------------------
     def test_c_mid_hold_screenshot_shows_pie(self):
-        self.prepare()
+        """The pie appears during the hold, fills, and follows the pointer.
+
+        Two holds, the pointer moved between them: the painted region must
+        grow within each hold and shift by the pointer's own displacement.
+        The probe reports window coordinates, so only the delta is compared.
+        """
+        p1 = self.prepare()
         self.gs_set(TIME, "3.0")
         base = self.settled_screenshot()
-        self.ctx.mouse.press()
+        c1 = self._pie_center_during_hold(base, "mid-hold.png")
+
+        self.ctx.mouse.move(200, 100, steps=10)
+        p2 = G.wait_until(
+            lambda: (lambda q: q if q != p1 and abs(q[0] - p1[0]) > 150 else None)(
+                self.probe.last_pointer()),
+            5, 0.1, "pointer moved")
+        base = self.settled_screenshot()
+        c2 = self._pie_center_during_hold(base, "mid-hold-moved.png")
+
+        dx, dy = c2[0] - c1[0], c2[1] - c1[1]
+        self.assertLess(abs(dx - (p2[0] - p1[0])), 20, (c1, c2, p1, p2))
+        self.assertLess(abs(dy - (p2[1] - p1[1])), 20, (c1, c2, p1, p2))
+
+    def _pie_center_during_hold(self, base, png):
+        """Hold, wait for a small pie and then a clearly larger one, release
+        before the 3 s delay, and return the larger one's bbox center."""
         found = {}
 
-        def pie():
+        def painted(min_count):
             img = self.ctx.screendump()
             d = diff_region(base, img, ignore_top=TOP_BAR_PX)
+            if d["count"] <= min_count:
+                return False
             found["img"], found["d"] = img, d
-            return d["count"] > 150
+            return True
 
+        self.ctx.mouse.press()
         try:
-            G.wait_until(pie, 2.5, 0.05, "pie timer for click lock")
+            G.wait_until(lambda: painted(150), 2.0, 0.05, "pie timer for click lock")
+            first = found["d"]["count"]
+            G.wait_until(lambda: painted(max(2 * first, 900)), 2.0, 0.05,
+                         "pie timer to fill")
         finally:
             self.ctx.mouse.release()
-        with open(os.path.join(self.art, "mid-hold.png"), "wb") as f:
+        with open(os.path.join(self.art, png), "wb") as f:
             f.write(found["img"].to_png())
         x0, y0, x1, y1 = found["d"]["bbox"]
-        self.assertLess(x1 - x0, 300)
-        self.assertLess(y1 - y0, 300)
+        # 60 px pie, at most scaled 2x in its zoom-out
+        self.assertLess(x1 - x0, 130, found["d"])
+        self.assertLess(y1 - y0, 130, found["d"])
+        return ((x0 + x1) / 2, (y0 + y1) / 2)
 
     # -- (d) mutual exclusion in the Settings UI ---------------------------
     def test_d_settings_click_lock_and_secondary_click_exclude_each_other(self):
