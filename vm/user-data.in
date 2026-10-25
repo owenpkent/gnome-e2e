@@ -1,0 +1,14 @@
+#cloud-config
+# Rendered by provision.sh; @PUBKEY@ is replaced with the dedicated e2e key.
+hostname: gnome-e2e
+users:
+  - name: tester
+    gecos: E2E tester
+    groups: [wheel]
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    lock_passwd: true
+    ssh_authorized_keys:
+      - @PUBKEY@
+disable_root: true
+ssh_pwauth: false
