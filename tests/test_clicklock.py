@@ -1,7 +1,11 @@
 """ClickLock tests (mutter native latch + shell pie timer + Settings UI).
 
-Skipped when the guest's schema has no click-lock-enabled key (stock Fedora
-45). Install the dev sysext with vm/install-sysext.sh to run them.
+On a plain run (smoke suite, stock Fedora 45) these are skipped when the
+guest's schema has no click-lock-enabled key. When the run is explicitly about
+ClickLock (run-e2e.py --sysext, or --suite clicklock; ctx.require_clicklock) a
+missing key or a missing Settings "Click Lock" row is a failure and the
+Settings UI is the only way to enable the feature (--allow-skips restores the
+old behaviour). Install the dev sysext with vm/install-sysext.sh to run them.
 
 Latch behaviour under test (see gsettings-desktop-schemas): holding the
 primary button for click-lock-time keeps it logically pressed after the
@@ -33,9 +37,12 @@ class ClickLock(E2ETestCase):
         if ClickLock._have_key is None:
             ClickLock._have_key = c.guest.has_key(A11Y, ENABLED)
         if not ClickLock._have_key:
-            raise unittest.SkipTest(
-                f"{A11Y} has no {ENABLED} key in the guest (stock Fedora 45); "
-                "install the sysext with vm/install-sysext.sh")
+            msg = (f"{A11Y} has no {ENABLED} key in the guest (stock Fedora 45); "
+                   "install the sysext with vm/install-sysext.sh")
+            if c.require_clicklock:
+                self.fail(msg + " (this run is about ClickLock, so this is a failure; "
+                          "--allow-skips to skip instead)")
+            raise unittest.SkipTest(msg)
         super().setUp()
         self.gs_set(TIME, str(DELAY))
 
@@ -45,12 +52,17 @@ class ClickLock(E2ETestCase):
         return bool(r and r.get("found"))
 
     def enable_click_lock(self):
-        """Via the Settings UI when the row exists, else gsettings."""
-        self.settings("open", check=False)
+        """Via the Settings UI. Without the row: a failure when the run is
+        about ClickLock, else (plain run, --allow-skips) gsettings."""
+        strict = self.ctx.require_clicklock
+        self.settings("open", check=strict)
         if self.ui_has_row(LOCK_ROW):
             r = self.settings("toggle", LOCK_ROW, "on", "--no-fallback")
             self.assertEqual(r.get("via"), "ui", r)
             self.via = "ui"
+        elif strict:
+            self.fail(f"Settings has no '{LOCK_ROW}' row: the UI path is mandatory in a "
+                      "ClickLock run (--allow-skips to fall back to gsettings)")
         else:
             self.gs_set(ENABLED, "true")
             self.via = "gsettings"
@@ -180,7 +192,10 @@ class ClickLock(E2ETestCase):
     def test_d_settings_click_lock_and_secondary_click_exclude_each_other(self):
         self.settings("open")
         if not self.ui_has_row(LOCK_ROW):
-            self.skipTest("Settings has no 'Click Lock' row (stock gnome-control-center)")
+            msg = "Settings has no 'Click Lock' row (stock gnome-control-center)"
+            if self.ctx.require_clicklock:
+                self.fail(msg + " (this run is about ClickLock, so this is a failure)")
+            self.skipTest(msg)
         self.settings("toggle", SECONDARY_ROW, "on", "--no-fallback")
         self.wait_gs("secondary-click-enabled", "true")
         self.settings("toggle", LOCK_ROW, "on", "--no-fallback")

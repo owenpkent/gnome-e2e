@@ -16,9 +16,16 @@ TOP_BAR_PX = 40  # rows ignored when diffing screenshots (clock lives there)
 
 
 class Context:
-    """One per run: the guest, the QMP link, the shared uinput mouse."""
+    """One per run: the guest, the QMP link, the shared uinput mouse.
 
-    def __init__(self, artifacts_root=None):
+    require_clicklock: the run is explicitly about ClickLock (a sysext was
+    installed, or the clicklock suite was asked for). The ClickLock tests then
+    never skip and never fall back to gsettings: a missing schema key or a
+    missing Settings row is a failure.
+    """
+
+    def __init__(self, artifacts_root=None, require_clicklock=False):
+        self.require_clicklock = require_clicklock
         stamp = time.strftime("%Y%m%d-%H%M%S")
         self.root = artifacts_root or os.path.join(G.VAR, "artifacts", stamp)
         os.makedirs(self.root, exist_ok=True)

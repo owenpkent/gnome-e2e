@@ -77,7 +77,7 @@ and mutter and warns about unresolved libraries; compare
 or in one go: `./run-e2e.py --fresh [--sysext [DIR]]` (stops any VM, starts a
 fresh overlay, optionally installs the sysext, runs, stops). Useful options:
 `--suite smoke|clicklock|all`, `-k SUBSTRING`, `-v`, `--keep-vm`, `--list`,
-`--artifacts DIR`.
+`--allow-skips`, `--artifacts DIR`.
 
 VM: KVM, `-cpu host`, 4 vCPUs, 6 GB, virtio-vga at 1280x800 (`-display none`,
 llvmpipe), user-net with `127.0.0.1:2222 -> :22`, a QMP socket at
@@ -113,8 +113,15 @@ Click" through the real UI (checked via gsettings), the secondary-click pie
 timer shows up around the pointer mid-hold (the reference for the click lock
 pie), and a hold past the delay yields the simulated right click.
 
-`tests/test_clicklock.py` is skipped when `gsettings range
-org.gnome.desktop.a11y.mouse click-lock-enabled` fails in the guest:
+`tests/test_clicklock.py` is skipped on a plain run when `gsettings range
+org.gnome.desktop.a11y.mouse click-lock-enabled` fails in the guest. A run that
+is explicitly about ClickLock (`--sysext`, or `--suite clicklock`) never skips:
+a missing key or a missing Settings "Click Lock" row is a failure, the Settings
+UI is the only way the tests enable the feature (no gsettings fallback), and the
+exit code is nonzero on any failure, error or skip (`--allow-skips` turns that
+off; `summary.json` records `clicklock_mode`, `allow_skips`, `exit_code` and the
+skips with their reasons). Selecting no ClickLock test in that mode (for example
+`--sysext --suite smoke`) exits 2 before the VM is touched. The tests:
 (a) lock, drag with BUTTON1_MASK, release on the next click, exactly one
 release; (b) a short click is a normal click; (c) mid-hold screenshot shows the
 pie; (d) Click Lock and Simulated Secondary Click exclude each other in

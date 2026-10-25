@@ -7,6 +7,16 @@
   ./run-e2e.py -k pie -v           select tests by substring, verbose
   ./run-e2e.py --suite smoke       smoke | clicklock | all (default: all)
 
+ClickLock mode: --sysext, or --suite clicklock. Such a run must actually test
+ClickLock: a guest without the click-lock-enabled key or a Settings without the
+"Click Lock" row is a failure (no skip, no gsettings fallback), a skipped test
+makes the exit code nonzero, and so does a selection without any ClickLock test.
+--allow-skips turns that off (skips tolerated, gsettings fallback allowed). A
+plain run (smoke on stock Fedora) keeps skipping the ClickLock tests.
+
+Exit code: 0 all selected tests passed; 1 a failure or error, or (ClickLock
+mode) a skip; 2 the guest was not reachable or the selection is unusable.
+
 Artifacts: var/artifacts/<timestamp>/<test id>/ with screenshots (PNG), the
 guest journal slice (full and gnome-shell/gdm filtered), the probe log and
 result.txt; summary.json at the top.
@@ -84,6 +94,9 @@ def main():
     ap.add_argument("--sysext", nargs="?", const="toolbox", metavar="DIR",
                     help="run vm/install-sysext.sh first (DIR: --from-dir; default: from the toolbox)")
     ap.add_argument("--suite", choices=["smoke", "clicklock", "all"], default="all")
+    ap.add_argument("--allow-skips", action="store_true",
+                    help="ClickLock mode (--sysext / --suite clicklock): tolerate skipped tests "
+                         "and the gsettings fallback (default: they fail the run)")
     ap.add_argument("-k", dest="pattern", default="", help="substring of the test id")
     ap.add_argument("-v", "--verbose", action="store_true")
     ap.add_argument("--list", action="store_true")
@@ -96,7 +109,14 @@ def main():
             print(t.id())
         return 0
 
-    ctx = testcase.Context(args.artifacts)
+    clicklock_mode = args.sysext is not None or args.suite == "clicklock"
+    require_clicklock = clicklock_mode and not args.allow_skips
+    if require_clicklock and not any("test_clicklock" in t.id() for t in suite):
+        print("ClickLock mode (--sysext / --suite clicklock) but no ClickLock test is selected "
+              "(--suite/-k); add --allow-skips to run anyway", file=sys.stderr)
+        return 2
+
+    ctx = testcase.Context(args.artifacts, require_clicklock=require_clicklock)
     testcase.set_context(ctx)
     print(f"artifacts: {ctx.root}")
     started = False
@@ -128,14 +148,23 @@ def main():
                                          resultclass=Result, stream=sys.stdout)
         t0 = time.time()
         result = runner.run(suite)
+        rc = 0 if result.wasSuccessful() else 1
+        if require_clicklock and result.skipped:
+            print(f"ClickLock mode: {len(result.skipped)} skipped test(s) count as failure "
+                  "(--allow-skips to tolerate)", file=sys.stderr)
+            rc = 1
         summary = {"started": time.strftime("%FT%T", time.localtime(t0)),
                    "seconds": round(time.time() - t0, 1),
+                   "clicklock_mode": clicklock_mode,
+                   "allow_skips": args.allow_skips,
+                   "exit_code": rc,
                    "counts": {"run": result.testsRun, "failures": len(result.failures),
                               "errors": len(result.errors), "skipped": len(result.skipped)},
+                   "skips": [{"test": o["test"], "reason": o["detail"]}
+                             for o in result.outcomes if o["status"] == "skip"],
                    "tests": result.outcomes}
         with open(os.path.join(ctx.root, "summary.json"), "w") as f:
             json.dump(summary, f, indent=2)
-        rc = 0 if result.wasSuccessful() else 1
     finally:
         ctx.close()
         if started and not args.keep_vm:
