@@ -31,6 +31,12 @@ class Smoke(E2ETestCase):
         self.assertEqual(tester[0].get("Active"), "yes", tester[0])
         self.assertEqual(g.gsettings_get("org.gnome.desktop.interface", "toolkit-accessibility"), "true")
         self.assertEqual(g.gsettings_get("org.gnome.desktop.session", "idle-delay"), "uint32 0")
+        self.assertEqual(g.gsettings_get("org.gnome.desktop.interface", "enable-hot-corners"), "false")
+        # The pie timers are animations; the shell inhibits them under
+        # software rendering unless started with --force-animations.
+        anim = g.run("busctl", "--user", "get-property", "org.gnome.Shell", "/org/gnome/Shell/Introspect",
+                     "org.gnome.Shell.Introspect", "AnimationsEnabled").stdout.strip()
+        self.assertEqual(anim, "b true", "animations are inhibited (pie timers would not draw)")
         env = g.run("python3", G.GUEST_PKG + "/session.py", "json", session=False).stdout
         with open(os.path.join(self.art, "session-env.json"), "w") as f:
             f.write(env)
@@ -133,9 +139,9 @@ class Smoke(E2ETestCase):
         self.sentinel()
         ev = self.probe.of_type("press", "release", since=n)
         buttons = [(e["type"], e["button"]) for e in ev]
-        self.assertIn(("press", 3), buttons, buttons)
-        self.assertIn(("release", 3), buttons, buttons)
-        self.assertNotIn(("press", 1), buttons, buttons)
+        # mutter lets the left press through, then cancels it with a release
+        # when the delay expires and emits the simulated right click.
+        self.assertEqual(buttons, [("press", 1), ("release", 1), ("press", 3), ("release", 3)], buttons)
 
 
 if __name__ == "__main__":

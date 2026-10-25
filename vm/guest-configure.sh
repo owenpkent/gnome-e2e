@@ -41,6 +41,18 @@ done
 chown -R $U:$U /home/$U/.config
 systemctl mask packagekit.service dnf-makecache.timer dnf-makecache.service 2>/dev/null || true
 
+# --- shell: behave like a hardware-accelerated session -----------------------
+# gnome-shell inhibits all animations when the compositor renders in software
+# (llvmpipe on virtio-gpu 2D). The pie timers (secondary click, click lock,
+# dwell) are animations: without them they never appear. --force-animations
+# is what the shell's own test tool passes.
+install -d /etc/systemd/user/org.gnome.Shell@.service.d
+cat >/etc/systemd/user/org.gnome.Shell@.service.d/10-e2e.conf <<'CONF'
+[Service]
+ExecStart=
+ExecStart=/usr/bin/gnome-shell --mode=%i --force-animations
+CONF
+
 # --- system dconf defaults (no lock screen, no blanking, no suspend, a11y) -
 install -d /etc/dconf/profile /etc/dconf/db/local.d
 cat >/etc/dconf/profile/user <<'CONF'
@@ -50,6 +62,7 @@ CONF
 cat >/etc/dconf/db/local.d/00-e2e <<'CONF'
 [org/gnome/desktop/interface]
 toolkit-accessibility=true
+enable-hot-corners=false
 
 [org/gnome/desktop/session]
 idle-delay=uint32 0
@@ -87,6 +100,17 @@ first-run=false
 [org/gnome/desktop/peripherals/mouse]
 accel-profile='flat'
 speed=0.0
+CONF
+# Lock what must not drift (gsd-a11y-settings rewrites toolkit-accessibility
+# to match the AT-SPI bus state at login, which otherwise leaves it false).
+install -d /etc/dconf/db/local.d/locks
+cat >/etc/dconf/db/local.d/locks/00-e2e <<'CONF'
+/org/gnome/desktop/interface/toolkit-accessibility
+/org/gnome/desktop/session/idle-delay
+/org/gnome/desktop/screensaver/lock-enabled
+/org/gnome/desktop/screensaver/idle-activation-enabled
+/org/gnome/settings-daemon/plugins/power/sleep-inactive-ac-type
+/org/gnome/settings-daemon/plugins/power/sleep-inactive-battery-type
 CONF
 dconf update
 

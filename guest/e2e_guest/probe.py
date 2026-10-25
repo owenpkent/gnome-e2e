@@ -31,7 +31,7 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
-from gi.repository import Gdk, GLib, Gtk  # noqa: E402
+from gi.repository import Gdk, GLib, GLibUnix, Gtk  # noqa: E402
 
 ET = Gdk.EventType
 NAMES = {
@@ -92,6 +92,11 @@ class Probe(Gtk.Application):
         self.emit(type="ready", pid=os.getpid())
 
     def on_event(self, ctl, ev):
+        # PyGObject may hand the "event" signal's GdkEvent over as None;
+        # the controller still knows the event it is handling.
+        ev = ev or ctl.get_current_event()
+        if ev is None:
+            return False
         name = NAMES.get(ev.get_event_type())
         if name is None:
             return False
@@ -115,8 +120,8 @@ def main():
     ap.add_argument("--title", default="e2e-probe")
     args = ap.parse_args()
     app = Probe(args.out, args.fullscreen, args.title)
-    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, lambda: app.quit() or False)
-    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, lambda: app.quit() or False)
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        GLibUnix.signal_add(GLib.PRIORITY_DEFAULT, sig, lambda: app.quit() or False)
     return app.run([sys.argv[0]])
 
 

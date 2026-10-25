@@ -8,6 +8,10 @@ derivable from /run/user/<uid>:
   DBUS_SESSION_BUS_ADDRESS  unix:path=/run/user/<uid>/bus
   WAYLAND_DISPLAY           the wayland-N socket in the runtime dir
 
+plus constants some clients insist on: XDG_CURRENT_DESKTOP=GNOME,
+XDG_SESSION_TYPE=wayland, XDG_SESSION_DESKTOP=gnome, GDK_BACKEND=wayland,
+LANG=en_US.UTF-8 (the Settings pages are matched by English names).
+
 CLI:
   session.py env                 print `export K=V` lines (eval them in sh)
   session.py json                print the environment as JSON
@@ -50,6 +54,10 @@ def session_env(user=USER, base=None):
     if wl:
         env["WAYLAND_DISPLAY"] = wl
     env["GDK_BACKEND"] = "wayland"
+    # gnome-control-center refuses to run unless it believes it is under GNOME.
+    env["XDG_CURRENT_DESKTOP"] = "GNOME"
+    env["XDG_SESSION_TYPE"] = "wayland"
+    env["XDG_SESSION_DESKTOP"] = "gnome"
     # Settings pages are matched by English names.
     env.setdefault("LANG", "en_US.UTF-8")
     env["LC_ALL"] = env["LANG"]
@@ -84,7 +92,8 @@ def main(argv):
     if cmd == "env":
         env = session_env()
         for k in ("XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS", "WAYLAND_DISPLAY",
-                  "GDK_BACKEND", "LANG", "LC_ALL"):
+                  "GDK_BACKEND", "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE",
+                  "XDG_SESSION_DESKTOP", "LANG", "LC_ALL"):
             if k in env:
                 print(f"export {k}='{env[k]}'")
         return 0

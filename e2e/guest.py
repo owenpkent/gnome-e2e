@@ -208,7 +208,7 @@ class Probe:
 
     def start(self, fullscreen=False, timeout=60):
         g = self.guest
-        g.run("pkill", "-f", "e2e_guest/probe.py", session=False, check=False)
+        g.run("pkill", "-f", "[e]2e_guest/probe.py", session=False, check=False)
         g.run("rm", "-f", self.path, session=False)
         self._raw, self._parsed, self.events = b"", 0, []
         opts = ["--fullscreen"] if fullscreen else []
@@ -225,7 +225,7 @@ class Probe:
         return None
 
     def stop(self):
-        self.guest.run("pkill", "-f", "e2e_guest/probe.py", session=False, check=False)
+        self.guest.run("pkill", "-f", "[e]2e_guest/probe.py", session=False, check=False)
 
     def poll(self):
         """Fetch new events from the guest file; return the full list."""

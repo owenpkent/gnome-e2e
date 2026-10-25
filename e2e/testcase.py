@@ -109,10 +109,13 @@ class E2ETestCase(unittest.TestCase):
         if self.ctx.has_mouse():
             for b in ("left", "right", "middle"):
                 self.ctx.mouse.release(b)
-        g.run("pkill", "-f", "e2e_guest/probe.py", session=False, check=False)
+        g.run("pkill", "-f", "[e]2e_guest/probe.py", session=False, check=False)
         g.run("pkill", "-x", "gnome-control-c", session=False, check=False)
-        g.run("pkill", "-f", "gnome-control-center", session=False, check=False)
         g.gsettings_reset_recursively(A11Y)
+        # A fresh GNOME session starts in the Activities overview; windows
+        # opened while it is up do not get focus and screenshots show it.
+        g.run("busctl", "--user", "set-property", "org.gnome.Shell", "/org/gnome/Shell",
+              "org.gnome.Shell", "OverviewActive", "b", "false", check=False)
 
     def run(self, result=None):
         if result is None:
@@ -153,8 +156,8 @@ class E2ETestCase(unittest.TestCase):
         with open(os.path.join(art, "result.txt"), "w") as f:
             f.write(("FAILED\n" + "\n".join(details)) if failed else "passed\n")
             f.write(f"\nduration: {time.monotonic() - self._t0:.1f}s\n")
-        self.guest.run("pkill", "-f", "e2e_guest/probe.py", session=False, check=False)
-        self.guest.run("pkill", "-f", "gnome-control-center", session=False, check=False)
+        self.guest.run("pkill", "-f", "[e]2e_guest/probe.py", session=False, check=False)
+        self.guest.run("pkill", "-x", "gnome-control-c", session=False, check=False)
 
     # -- screenshots ----------------------------------------------------
     def screenshot(self, name=None):
@@ -193,8 +196,10 @@ class E2ETestCase(unittest.TestCase):
         probe's own motion events as feedback (no assumption on accel)."""
         w, h = self.layout
         m = self.ctx.mouse
-        m.move(-4000, -4000, steps=4)
-        m.move(w // 2, h // 2 + 40, steps=max(1, (w // 2) // 10))
+        # Slam into the bottom-left corner (the top-left one is the hot corner),
+        # then travel to the middle of the window.
+        m.move(-4000, 4000, steps=4)
+        m.move(w // 2, -(h // 2), steps=max(1, (w // 2) // 10))
         for _ in range(8):
             pos = G.wait_until(self.probe.last_pointer, 15, 0.2, "pointer motion seen by probe")
             dx, dy = w / 2 - pos[0], h / 2 - pos[1]
