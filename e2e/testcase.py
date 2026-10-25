@@ -198,21 +198,57 @@ class E2ETestCase(unittest.TestCase):
         self.layout = (layout["width"], layout["height"])
         return layout
 
+    def pointer_seen(self, since=0, timeout=15.0):
+        """Position (surface coordinates) of the last pointer event the probe
+        got after event index `since`, once it stopped changing.
+
+        The probe logs "ready" when GTK maps its window, but the shell needs
+        a few hundred ms more (a second or more on a busy guest: map
+        animation, first frame) before the window can be picked under the
+        pointer. Motion sent earlier reaches nobody, and mutter does not send
+        an enter to a window that appears under a pointer which then stands
+        still: without more motion the probe stays silent for good. So while
+        the probe has seen nothing, wobble the pointer by 2 px until it does.
+        """
+        m = self.ctx.mouse
+        state = {"sign": 1, "last": None}
+
+        def settled():
+            evs = [e for e in self.probe.of_type("motion", "press", "release", "enter", since=since)
+                   if "x" in e]
+            if not evs:
+                m.move(2 * state["sign"], 0, steps=1)
+                state["sign"] = -state["sign"]
+                return None
+            pos = (evs[-1]["x"], evs[-1]["y"])
+            if pos == state["last"]:
+                return pos
+            state["last"] = pos
+            return None
+
+        return G.wait_until(settled, timeout, 0.15, "pointer motion seen by probe")
+
     def center_pointer(self, tol=60):
         """Put the pointer in the middle of the probe window, using the
         probe's own motion events as feedback (no assumption on accel)."""
         w, h = self.layout
         m = self.ctx.mouse
         # Slam into the bottom-left corner (the top-left one is the hot corner),
-        # then travel to the middle of the window.
+        # then travel to the middle of the window. The probe may not be able to
+        # see any of it yet; the pointer itself ends up in the right place anyway
+        # and pointer_seen() keeps nudging until the window gets events.
         m.move(-4000, 4000, steps=4)
         m.move(w // 2, -(h // 2), steps=max(1, (w // 2) // 10))
-        for _ in range(8):
-            pos = G.wait_until(self.probe.last_pointer, 15, 0.2, "pointer motion seen by probe")
+        pos = self.pointer_seen()
+        for attempt in range(9):
             dx, dy = w / 2 - pos[0], h / 2 - pos[1]
             if abs(dx) <= tol and abs(dy) <= tol:
                 return pos
+            if attempt == 8:
+                break
+            n = self.probe.mark()
             m.move(int(dx), int(dy))
+            pos = self.pointer_seen(since=n)
         raise AssertionError(f"could not center the pointer, last seen at {self.probe.last_pointer()}")
 
     def screen_y(self, surface_y):

@@ -183,6 +183,13 @@ journal slice for that test), `journal-shell-gdm.txt` (gnome-shell / gdm / mutte
   aborted: "schema org.gnome.SessionManager is not installed"):
   `desktop-backgrounds-gnome` overrides a key that gsettings-desktop-schemas no
   longer has, which a `--strict` compile rejects. `guest-configure.sh` recompiles.
+* The probe's `ready` line only means GTK mapped the window. The shell needs a few
+  hundred ms more (a second or more on a busy guest) before the window can get the
+  pointer; motion sent earlier reaches nobody, and mutter sends no enter to a
+  window that appears under a pointer which then stands still, so the probe stays
+  silent for good ("timed out waiting for pointer motion seen by probe", about 1
+  run in 20). `center_pointer()` therefore wobbles the pointer by 2 px until the
+  probe has seen an event (`pointer_seen()`), then corrects from fresh events.
 * `pkill -f` over ssh matches its own shell; the code uses `-x` or `[x]pattern`.
 
 ## Known limits
