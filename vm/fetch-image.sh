@@ -70,7 +70,7 @@ if [[ ! -s $DL/$E2E_IMAGE_FILE ]]; then
 fi
 
 # --- verify signature ------------------------------------------------------
-status=$(gpg --batch --status-fd 1 --output "$DL/$E2E_CHECKSUM_FILE.signed-text" --decrypt "$DL/$E2E_CHECKSUM_FILE" 2>/dev/null || true)
+status=$(gpg --batch --yes --status-fd 1 --output "$DL/$E2E_CHECKSUM_FILE.signed-text" --decrypt "$DL/$E2E_CHECKSUM_FILE" 2>/dev/null || true)
 echo "$status" | rg -q '^\[GNUPG:\] GOODSIG ' || die "bad or missing signature on $E2E_CHECKSUM_FILE"
 echo "$status" | rg -q "^\[GNUPG:\] VALIDSIG ${F45_FPR} " || die "CHECKSUM not signed by the pinned Fedora 45 key"
 log "GPG: good signature by Fedora (45) primary key $F45_FPR"
