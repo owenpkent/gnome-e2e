@@ -44,6 +44,7 @@ class Recorder(threading.Thread):
     def __init__(self, out, fps):
         super().__init__(daemon=True)
         self.fps, self.stop_flag, self.frames = fps, threading.Event(), 0
+        self.error = None
         self.qmp = QMP(os.path.join(RUN, "qmp.sock"))
         self.qmp.connect(retries=5)
         self.ffmpeg = subprocess.Popen(
@@ -53,6 +54,12 @@ class Recorder(threading.Thread):
              "-movflags", "+faststart", out], stdin=subprocess.PIPE)
 
     def run(self):
+        try:
+            self._record()
+        except BaseException as exc:  # reported by finish()
+            self.error = exc
+
+    def _record(self):
         path = os.path.join(RUN, "demo-frame.ppm")
         period = 1.0 / self.fps
         next_t = time.monotonic()
@@ -74,12 +81,22 @@ class Recorder(threading.Thread):
                 next_t += period
             time.sleep(max(0.0, next_t - time.monotonic()))
 
-    def finish(self):
+    def finish(self, check=True):
+        """Stop and wait for ffmpeg; with check, raise if recording failed."""
         self.stop_flag.set()
         self.join()
-        self.ffmpeg.stdin.close()
-        self.ffmpeg.wait()
+        try:
+            self.ffmpeg.stdin.close()
+        except BrokenPipeError:
+            pass
+        rc = self.ffmpeg.wait()
         self.qmp.close()
+        if not check:
+            return
+        if self.error is not None:
+            raise RuntimeError(f"recording failed: {self.error!r} (ffmpeg exit {rc})") from self.error
+        if rc != 0:
+            raise RuntimeError(f"ffmpeg exited {rc}")
 
 
 class Demo:
@@ -259,16 +276,24 @@ def main():
     ap.add_argument("--fps", type=int, default=12)
     ap.add_argument("--restart-session", action="store_true")
     a = ap.parse_args()
+    out = os.path.abspath(a.out)
+    if not os.path.isdir(os.path.dirname(out)):
+        sys.exit(f"{a.out}: directory {os.path.dirname(out)} does not exist")
     g = G.Guest()
     g.push_package()
     if a.restart_session:
         restart_session(g)
-    rec = Recorder(os.path.abspath(a.out), a.fps)
+    rec = Recorder(out, a.fps)
     rec.start()
     try:
         Demo(g).run()
-    finally:
+    except BaseException:
+        rec.finish(check=False)  # keep the demo's own error
+        raise
+    try:
         rec.finish()
+    except RuntimeError as exc:
+        sys.exit(f"{a.out}: {exc}")
     print(f"{a.out}: {rec.frames} frames, {rec.frames / a.fps:.1f} s")
 
 
