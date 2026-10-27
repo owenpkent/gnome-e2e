@@ -195,8 +195,10 @@ class ClickLock(E2ETestCase):
         self.assertLess(y1 - y0, 130, found["d"])
         return ((x0 + x1) / 2, (y0 + y1) / 2)
 
-    # -- (d) mutual exclusion in the Settings UI ---------------------------
-    def test_d_settings_click_lock_and_secondary_click_exclude_each_other(self):
+    # -- (d) with Simulated Secondary Click on as well ----------------------
+    def test_d_settings_click_lock_and_secondary_click_coexist(self):
+        """Settings turns neither off (as in PowerToys); mutter lets the
+        secondary click win on the primary button, the other buttons lock."""
         self.settings("open")
         if not self.ui_has_row(LOCK_ROW):
             msg = "Settings has no 'Click Lock' row (stock gnome-control-center)"
@@ -207,13 +209,38 @@ class ClickLock(E2ETestCase):
         self.wait_gs("secondary-click-enabled", "true")
         self.settings("toggle", LOCK_ROW, "on", "--no-fallback")
         self.wait_gs(ENABLED, "true")
-        self.wait_gs("secondary-click-enabled", "false")
-        self.screenshot("lock-on")
-        self.settings("toggle", SECONDARY_ROW, "on", "--no-fallback")
-        self.wait_gs("secondary-click-enabled", "true")
-        self.wait_gs(ENABLED, "false")
-        self.screenshot("secondary-on")
+        self.settings("toggle", BUTTON_ROWS["middle"], "on", "--no-fallback")
+        self.wait_gs(BUTTONS, "['primary', 'middle']")
+        self.assertEqual(self.gs_get("secondary-click-enabled"), "true")
+        self.screenshot("both-on")
         self.settings("close", check=False)
+        self.gs_set("secondary-click-time", "1.2")
+        self.start_probe()
+        self.center_pointer()
+
+        # The middle button still locks.
+        n = self.lock_the_button("middle")
+        self.sentinel()
+        ev = self.events(n, "press", "release")
+        self.assertEqual([(e["type"], e["button"]) for e in ev], [("press", 2)], ev)
+        k = self.probe.mark()
+        self.ctx.mouse.click("middle")
+        G.wait_until(lambda: self.events(k, "release"), 10, 0.1, "middle release")
+        self.sentinel()
+
+        # A long primary hold is the simulated secondary click, not a lock.
+        n = self.probe.mark()
+        self.ctx.mouse.hold(HOLD_MS)
+        G.wait_until(lambda: [e for e in self.events(n, "press") if e["button"] == 3],
+                     8, 0.2, "simulated right-button press")
+        self.sentinel()
+        ev = self.events(n, "press", "release")
+        self.assertEqual([(e["type"], e["button"]) for e in ev],
+                         [("press", 1), ("release", 1), ("press", 3), ("release", 3)], ev)
+        q = self.probe.mark()
+        self.ctx.mouse.move(60, 0)
+        self.sentinel()
+        self.assertFalse(any(e["b1"] for e in self.events(q, "motion")), "primary locked")
 
     # -- (e) disabling while locked releases the button -------------------
     def test_e_disable_while_locked_releases(self):

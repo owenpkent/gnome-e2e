@@ -441,7 +441,7 @@ def find_scale(win, row_title, scale_name):
         return None
     for n in nodes[start + 1:]:
         r = role(n)
-        if r == "slider":
+        if r in ("slider", "spin button"):
             if name(n) == scale_name or row_title_of(n) == scale_name:
                 return n
         elif (r in SWITCH_ROLES and "toggle" in actions(n) and name(n)

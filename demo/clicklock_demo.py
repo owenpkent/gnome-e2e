@@ -176,7 +176,7 @@ class Demo:
         self.settings("toggle", "Secondary Button", "on", "--no-fallback")
         time.sleep(1.5)
         # Scroll down to Delay and Motion Threshold.
-        self.settings("focus-scale", "Click Lock", "Click Lock Motion Threshold")
+        self.settings("focus-scale", "Click Lock", "Motion Threshold")
         time.sleep(3.5)
         self.settings("close")
 
