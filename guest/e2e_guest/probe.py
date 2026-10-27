@@ -8,7 +8,7 @@ Opens a (maximized by default) window and appends one JSON object per line to
    "type": "press"|"release"|"motion"|"enter"|"leave"|"scroll",
    "button": 1..,            (press/release)
    "x": .., "y": ..,         (surface coordinates)
-   "state": <GdkModifierType int>, "b1": <BUTTON1_MASK set>, "b3": <BUTTON3_MASK set>}
+   "state": <GdkModifierType int>, "b1": <BUTTON1_MASK set>, "b2": <BUTTON2_MASK set>, "b3": <BUTTON3_MASK set>}
 
 plus bookkeeping lines: {"type": "ready", "pid": N}, {"type": "layout",
 "width": W, "height": H} whenever the surface is (re)laid out.
@@ -103,6 +103,7 @@ class Probe(Gtk.Application):
         state = int(ev.get_modifier_state())
         rec = {"type": name, "evt_ms": ev.get_time(), "state": state,
                "b1": bool(state & Gdk.ModifierType.BUTTON1_MASK),
+               "b2": bool(state & Gdk.ModifierType.BUTTON2_MASK),
                "b3": bool(state & Gdk.ModifierType.BUTTON3_MASK)}
         ok, x, y = ev.get_position()
         if ok:

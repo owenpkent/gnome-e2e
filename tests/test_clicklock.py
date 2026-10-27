@@ -7,9 +7,10 @@ missing key or a missing Settings "Click Lock" row is a failure and the
 Settings UI is the only way to enable the feature (--allow-skips restores the
 old behaviour). Install the dev sysext with vm/install-sysext.sh to run them.
 
-Latch behaviour under test (see gsettings-desktop-schemas): holding the
-primary button for click-lock-time keeps it logically pressed after the
-physical release, until the next button press.
+Latch behaviour under test (see gsettings-desktop-schemas): holding one of
+the click-lock-buttons (primary by default, secondary and middle optional) for
+click-lock-time keeps it logically pressed after the physical release, until
+the next button press.
 """
 
 import os
@@ -22,6 +23,10 @@ from e2e.testcase import A11Y, TOP_BAR_PX, E2ETestCase
 
 ENABLED = "click-lock-enabled"
 TIME = "click-lock-time"
+BUTTONS = "click-lock-buttons"
+# Settings check rows for click-lock-buttons, by the flag they set.
+BUTTON_ROWS = {"secondary": "Secondary Button",
+               "middle": "Middle Button"}
 LOCK_ROW = "Click Lock"
 SECONDARY_ROW = "Simulated Secondary Click"
 DELAY = 1.0         # click-lock-time used by the tests, seconds
@@ -45,6 +50,8 @@ class ClickLock(E2ETestCase):
             raise unittest.SkipTest(msg)
         super().setUp()
         self.gs_set(TIME, str(DELAY))
+        if c.guest.has_key(A11Y, BUTTONS):
+            self.gs_set(BUTTONS, "['primary']")
 
     # -- helpers --------------------------------------------------------
     def ui_has_row(self, title):
@@ -69,10 +76,10 @@ class ClickLock(E2ETestCase):
         self.wait_gs(ENABLED, "true")
         self.settings("close", check=False)
 
-    def lock_the_button(self):
+    def lock_the_button(self, button="left"):
         """Hold longer than the delay, release; return probe mark before."""
         n = self.probe.mark()
-        self.ctx.mouse.hold(HOLD_MS)
+        self.ctx.mouse.hold(HOLD_MS, button)
         G.wait_until(lambda: self.probe.of_type("press", since=n), 5, 0.1, "press at the client")
         return n
 
@@ -224,6 +231,63 @@ class ClickLock(E2ETestCase):
         self.ctx.mouse.move(60, 0)
         self.sentinel()
         self.assertFalse(any(e["b1"] for e in self.events(q, "motion")))
+
+    # -- (f) secondary and middle buttons, picked in Settings -------------
+    def test_f_secondary_and_middle_buttons_lock(self):
+        # GDK numbers the middle button 2 (BUTTON2_MASK) and the right one 3.
+        cases = (("right", 3, "b3"), ("middle", 2, "b2"))
+        if not self.ctx.guest.has_key(A11Y, BUTTONS):
+            msg = f"{A11Y} has no {BUTTONS} key in the guest"
+            if self.ctx.require_clicklock:
+                self.fail(msg)
+            self.skipTest(msg)
+        self.settings("open")
+        if not self.ui_has_row(LOCK_ROW):
+            msg = f"Settings has no '{LOCK_ROW}' row"
+            if self.ctx.require_clicklock:
+                self.fail(msg)
+            self.skipTest(msg)
+        self.settings("toggle", LOCK_ROW, "on", "--no-fallback")
+        self.wait_gs(ENABLED, "true")
+        for flag, title in BUTTON_ROWS.items():
+            r = self.settings("toggle", title, "on", "--no-fallback")
+            self.assertEqual(r.get("via"), "ui", r)
+        self.wait_gs(BUTTONS, "['primary', 'secondary', 'middle']")
+        self.screenshot("buttons-on")
+        self.settings("close", check=False)
+        self.start_probe()
+        self.center_pointer()
+
+        for button, gdk_button, mask in cases:
+            with self.subTest(button=button):
+                n = self.lock_the_button(button)
+                self.sentinel()
+                ev = self.events(n, "press", "release")
+                self.assertEqual([(e["type"], e["button"]) for e in ev], [("press", gdk_button)],
+                                 f"{button}: expected the press without a release, got {ev}")
+                m = self.probe.mark()
+                self.ctx.mouse.move(120, 0, steps=12, delay_ms=20)
+                G.wait_until(lambda: len(self.events(m, "motion")) >= 3, 10, 0.1, "drag motion events")
+                self.sentinel()
+                motions = self.events(m, "motion")
+                self.assertTrue(all(e[mask] for e in motions),
+                                f"{button}: motion without its mask while locked: "
+                                f"{[e for e in motions if not e[mask]][:3]}")
+                self.assertEqual(self.events(m, "release"), [])
+
+                # The next click of the same button releases it and is swallowed.
+                k = self.probe.mark()
+                self.ctx.mouse.click(button)
+                G.wait_until(lambda: self.events(k, "release"), 10, 0.1, f"{button} release")
+                self.sentinel()
+                rel = self.events(n, "press", "release")
+                self.assertEqual([(e["type"], e["button"]) for e in rel],
+                                 [("press", gdk_button), ("release", gdk_button)], rel)
+                q = self.probe.mark()
+                self.ctx.mouse.move(-120, 0, steps=12, delay_ms=20)
+                self.sentinel()
+                self.assertFalse(any(e[mask] for e in self.events(q, "motion")),
+                                 f"{button} still held after the unlocking click")
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ Commands (all print one JSON object on the last stdout line, exit 0/1):
         (a short-lived virtual keyboard, no root needed).
   close                      quit Settings
   has-row TITLE              is a visible row/label with this name on screen?
-  toggle TITLE [on|off|flip] set the switch in row TITLE (default flip)
+  toggle TITLE [on|off|flip] set the switch or check box in row TITLE (default flip)
   get-switch TITLE           state of that switch
   get-scale ROW SCALE        value of slider SCALE under row ROW
   set-scale ROW SCALE VALUE  set it (the row must be expanded/visible)
@@ -45,7 +45,7 @@ APP_NAME = "gnome-control-center"
 SWITCH_ROLES = ("switch", "toggle button", "check box")
 ROW_ROLES = ("list item", "switch", "toggle button", "check box", "button", "row")
 A11Y_MOUSE = "org.gnome.desktop.a11y.mouse"
-KEY_TAB, KEY_ENTER, KEY_ESC = 15, 28, 1
+KEY_TAB, KEY_ENTER, KEY_ESC, KEY_SPACE = 15, 28, 1, 57
 
 # Fallback maps: visible name -> gsettings key.
 FALLBACK_SWITCH = {
@@ -187,11 +187,30 @@ def find_row(root, title):
 
 
 def toggle_widget(node):
-    """The node in node's subtree (or itself) that can be toggled."""
+    """The node in node's subtree (or itself) that can be toggled. GTK 4
+    check buttons expose no AT-SPI action; one is returned as a last resort
+    and toggled from the keyboard (see press_space)."""
+    fallback = None
     for n, _ in walk(node, max_depth=8):
         if role(n) in SWITCH_ROLES and any(a in ("toggle", "click", "activate") for a in actions(n)):
             return n
-    return None
+        if fallback is None and role(n) == "check box":
+            fallback = n
+    return fallback
+
+
+def press_space(acc, max_tabs=80):
+    """Tab to *acc* and press Space, via RemoteDesktop. GTK 4 does not
+    implement AT-SPI GrabFocus, so focus is moved the way a keyboard user
+    would; the Settings window must have keyboard focus."""
+    with RemoteKeys() as keys:
+        for _ in range(max_tabs):
+            if "focused" in states(acc):
+                keys.key(KEY_SPACE)
+                return "space"
+            keys.key(KEY_TAB)
+            time.sleep(0.05)
+    raise DriverError(f"{name(acc)!r} ({role(acc)}) never got focus after {max_tabs} Tabs")
 
 
 def checked(node, widget):
@@ -343,7 +362,7 @@ def cmd_toggle(a):
     before = checked(row, widget)
     want = (not before) if a.state == "flip" else (a.state == "on")
     if before != want:
-        used = do_action(widget)
+        used = do_action(widget) if actions(widget) else press_space(widget)
         wait_for(lambda: checked(row, widget) == want, a.timeout, f"{a.title!r} to become {a.state}")
         log(f"switch {a.title!r} via {used}")
     return {"ok": True, "via": "ui", "title": a.title, "before": before, "after": checked(row, widget)}
