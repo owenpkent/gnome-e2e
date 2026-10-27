@@ -169,6 +169,9 @@ build_qemu_args() {
         -pidfile "$E2E_PIDFILE"
         -daemonize
     )
+    # E2E_VNC=1: also serve the screen on 127.0.0.1:5901 to watch a run.
+    # Connect view-only: VNC input would reach the guest's PS/2 mouse.
+    if [[ -n ${E2E_VNC:-} ]]; then QEMU_ARGS+=(-vnc 127.0.0.1:1); fi
 }
 
 # Ask a running qemu to quit and wait for it to disappear.

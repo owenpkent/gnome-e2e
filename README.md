@@ -86,6 +86,16 @@ llvmpipe), user-net with `127.0.0.1:2222 -> :22`, a QMP socket at
 `E2E_RES_X/Y`, `E2E_BOOT_TIMEOUT`, `E2E_KEEP_ON_FAIL=1`, `E2E_TOOLBOX`.
 Log in by hand: `ssh -i var/ssh/id_ed25519 -p 2222 tester@127.0.0.1`.
 
+Watch a run: start the VM with `E2E_VNC=1` (VNC on `127.0.0.1:5901`) and
+connect a viewer in view-only mode, since VNC input reaches the guest's PS/2
+mouse and would disturb the tests. With Remmina, use a profile with
+`protocol=VNC`, `server=127.0.0.1:5901`, `viewonly=1`, and launch it with
+`systemd-run --user --collect remmina -c <profile>`: started from the VS Code
+snap's terminal it inherits the snap's environment and exits at once.
+
+    E2E_VNC=1 vm/start.sh
+    ./run-e2e.py --sysext var/sysext/gnome-shell-devel   # against the watched VM
+
 ## Installing a sysext
 
 Assemble it in the toolbox as usual (`meson-build.sh --sysext` in mutter,
