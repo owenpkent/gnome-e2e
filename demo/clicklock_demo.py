@@ -174,7 +174,10 @@ class Demo:
         self.settings("toggle", "Middle Button", "on", "--no-fallback")
         time.sleep(1.5)
         self.settings("toggle", "Secondary Button", "on", "--no-fallback")
-        time.sleep(2.5)
+        time.sleep(1.5)
+        # Scroll down to Delay and Motion Threshold.
+        self.settings("focus-scale", "Click Lock", "Click Lock Motion Threshold")
+        time.sleep(3.5)
         self.settings("close")
 
         g.run("rm", "-f", POINTER, session=False)
@@ -199,6 +202,17 @@ class Demo:
         self.locked_drag("left", "Primary", "blue", ROWS[1])
         self.locked_drag("right", "Secondary", "red", ROWS[2])
         self.locked_drag("middle", "Middle", "green", ROWS[3])
+
+        self.goto(700, ROWS[1])
+        self.caption("Motion Threshold: moving more than 5 px before letting go cancels the lock", 1.5)
+        self.mouse.press("left")
+        self.caption("Physically holding the primary button and moving: an ordinary drag", 0.3)
+        self.wave(300, ms=1800)
+        time.sleep(0.4)
+        self.mouse.release("left")
+        self.caption("Released: nothing is locked, so moving does not draw", 0.3)
+        self.move(int(-150 / self.gain), int(50 / self.gain), 900)
+        time.sleep(0.8)
         self.goto(700, ROWS[0])
 
         self.caption("Short clicks stay ordinary clicks: nothing locks", 0.5)

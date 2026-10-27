@@ -19,6 +19,7 @@ Commands (all print one JSON object on the last stdout line, exit 0/1):
   get-switch TITLE           state of that switch
   get-scale ROW SCALE        value of slider SCALE under row ROW
   set-scale ROW SCALE VALUE  set it (the row must be expanded/visible)
+  focus-scale ROW SCALE      tab to it, scrolling it into view
   dump [--depth N]           print the accessibility tree (text, for debugging)
 
 Options: --no-fallback  never fall back to gsettings (fail instead)
@@ -449,6 +450,20 @@ def find_scale(win, row_title, scale_name):
     return None
 
 
+def cmd_focus_scale(a):
+    """Tab to slider SCALE under row ROW, which scrolls it into view."""
+    sc = find_scale(get_window(a.timeout), a.row, a.scale)
+    if sc is None:
+        raise DriverError(f"no slider {a.scale!r} under row {a.row!r}")
+    with RemoteKeys() as keys:
+        for _ in range(80):
+            if "focused" in states(sc):
+                return {"ok": True, "scale": a.scale, "value": sc.get_current_value()}
+            keys.key(KEY_TAB)
+            time.sleep(0.05)
+    raise DriverError(f"{a.scale!r} never got focus")
+
+
 def cmd_get_scale(a):
     sc = find_scale(get_window(a.timeout), a.row, a.scale)
     if sc is None:
@@ -493,7 +508,7 @@ def cmd_dump(a):
 
 
 COMMANDS = {"open": cmd_open, "close": cmd_close, "has-row": cmd_has_row,
-            "toggle": cmd_toggle, "expand": cmd_expand, "get-switch": cmd_get_switch, "get-scale": cmd_get_scale,
+            "toggle": cmd_toggle, "expand": cmd_expand, "get-switch": cmd_get_switch, "get-scale": cmd_get_scale, "focus-scale": cmd_focus_scale,
             "set-scale": cmd_set_scale, "dump": cmd_dump}
 
 
@@ -514,6 +529,7 @@ def parse(argv):
     p = sub.add_parser("expand"); p.add_argument("title")
     p = sub.add_parser("get-switch"); p.add_argument("title")
     p = sub.add_parser("get-scale"); p.add_argument("row"); p.add_argument("scale")
+    p = sub.add_parser("focus-scale"); p.add_argument("row"); p.add_argument("scale")
     p = sub.add_parser("set-scale"); p.add_argument("row"); p.add_argument("scale"); p.add_argument("value")
     p = sub.add_parser("dump"); p.add_argument("--depth", type=int, default=40)
     # global options are also accepted after the sub-command
