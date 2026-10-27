@@ -134,8 +134,11 @@ skips with their reasons). Selecting no ClickLock test in that mode (for example
 `--sysext --suite smoke`) exits 2 before the VM is touched. The tests:
 (a) lock, drag with BUTTON1_MASK, release on the next click, exactly one
 release; (b) a short click is a normal click; (c) mid-hold screenshot shows the
-pie; (d) Click Lock and Simulated Secondary Click exclude each other in
-Settings; (e) disabling while locked releases the button.
+pie; (d) Click Lock and Simulated Secondary Click both on: Settings turns
+neither off, a middle hold locks and a long primary hold is the simulated right
+click; (e) disabling while locked releases the button; (f) the Secondary and
+Middle Button check boxes, ticked in Settings, make those buttons lock and
+release (GDK button 3 and 2, BUTTON3_MASK and BUTTON2_MASK).
 
 Waiting is condition based (`e2e.guest.wait_until`); the only sleeps are the
 deliberate button-hold durations. "Nothing happened" assertions use a sentinel:
@@ -166,14 +169,40 @@ journal slice for that test), `journal-shell-gdm.txt` (gnome-shell / gdm / mutte
   CLOCK_MONOTONIC. The host keeps one ssh channel open to it for the whole run.
 * `probe.py`: maximized GTK4 window (`--fullscreen` available) that appends JSON
   lines for press, release, motion, enter, leave, scroll with `t_ns`
-  (CLOCK_MONOTONIC), `x`/`y` (surface coordinates), `state`, `b1`. Note the GDK
+  (CLOCK_MONOTONIC), `x`/`y` (surface coordinates), `state`, `b1`, `b2`, `b3`
+  (GDK's BUTTON1/2/3_MASK: primary, middle, secondary). Note the GDK
   semantics: `state` is the state before the event, so `b1` is true on a
   release and on motion while held, false on the press. The window never redraws,
   so screenshots only change because of what the shell draws.
 * `settings_driver.py`: AT-SPI (gi `Atspi`) driver for gnome-control-center, see
-  `--help`: `open`, `has-row`, `toggle TITLE on|off|flip`, `get-switch`,
-  `get-scale ROW SCALE`, `set-scale ROW SCALE VALUE`, `dump`, `close`, with a
-  gsettings fallback (`--no-fallback` to forbid it).
+  `--help`: `open`, `has-row`, `toggle TITLE on|off|flip`, `expand TITLE`,
+  `get-switch`, `get-scale ROW SCALE`, `set-scale ROW SCALE VALUE`,
+  `focus-scale ROW SCALE` (sliders and spin buttons), `dump`, `close`, with a
+  gsettings fallback (`--no-fallback` to forbid it). GTK 4 check buttons expose
+  no AT-SPI action and GTK 4 does not implement AT-SPI `GrabFocus`, so check
+  boxes, `expand` and `focus-scale` move focus with Tab (through mutter's
+  RemoteDesktop keyboard) and press Space or Enter; Settings must have keyboard
+  focus. A reopened page has its expander rows collapsed: `expand` first.
+* `demo_canvas.py`: window for demo videos. Draws a trail per button the client
+  sees held (blue primary, red secondary, green middle), shows which buttons it
+  sees held, a caption read from a file, and writes the pointer position to a
+  file so the demo script can steer.
+
+## Demo video
+
+`demo/clicklock_demo.py OUT.mp4 [--fps 12] [--restart-session]` records a
+narrated run from a VM that has the sysext (for example after
+`./run-e2e.py --fresh --keep-vm --sysext DIR`): Settings (Click Lock on, button
+check boxes, Delay and Motion Threshold), then a normal drag, a locked drag per
+button, a hold cancelled by the threshold, short clicks, and unticking a button.
+Frames are QMP screendumps piped to ffmpeg at a fixed rate (real time even when a
+screendump is slow). `--restart-session` restarts the guest session with
+`MUTTER_DEBUG_DISABLE_HW_CURSORS=1` (via `~/.config/environment.d`) so the
+pointer appears in screendumps; needed once per fresh VM. Pointer acceleration
+is not 1:1 in the guest, so the script calibrates against the canvas's reported
+position and steers to coordinates. A GIF for MRs:
+
+    ffmpeg -i OUT.mp4 -vf "fps=10,scale=800:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=64:stats_mode=diff[p];[b][p]paletteuse=dither=none:diff_mode=rectangle" -loop 0 OUT.gif
 
 ## Things worth knowing (all found the hard way)
 
