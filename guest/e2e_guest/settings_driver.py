@@ -15,6 +15,7 @@ Commands (all print one JSON object on the last stdout line, exit 0/1):
   close                      quit Settings
   has-row TITLE              is a visible row/label with this name on screen?
   toggle TITLE [on|off|flip] set the switch or check box in row TITLE (default flip)
+  expand TITLE               expand the expander row TITLE (from the keyboard)
   get-switch TITLE           state of that switch
   get-scale ROW SCALE        value of slider SCALE under row ROW
   set-scale ROW SCALE VALUE  set it (the row must be expanded/visible)
@@ -199,15 +200,15 @@ def toggle_widget(node):
     return fallback
 
 
-def press_space(acc, max_tabs=80):
-    """Tab to *acc* and press Space, via RemoteDesktop. GTK 4 does not
-    implement AT-SPI GrabFocus, so focus is moved the way a keyboard user
-    would; the Settings window must have keyboard focus."""
+def press_space(acc, max_tabs=80, key=KEY_SPACE):
+    """Tab to *acc* and press *key* (Space), via RemoteDesktop. GTK 4 does
+    not implement AT-SPI GrabFocus, so focus is moved the way a keyboard
+    user would; the Settings window must have keyboard focus."""
     with RemoteKeys() as keys:
         for _ in range(max_tabs):
             if "focused" in states(acc):
-                keys.key(KEY_SPACE)
-                return "space"
+                keys.key(key)
+                return "space" if key == KEY_SPACE else "enter"
             keys.key(KEY_TAB)
             time.sleep(0.05)
     raise DriverError(f"{name(acc)!r} ({role(acc)}) never got focus after {max_tabs} Tabs")
@@ -368,6 +369,20 @@ def cmd_toggle(a):
     return {"ok": True, "via": "ui", "title": a.title, "before": before, "after": checked(row, widget)}
 
 
+def cmd_expand(a):
+    """Expand the expander row *title* (a collapsed row's children are not
+    in the tree) by tabbing to its header and pressing Enter."""
+    win = get_window(a.timeout)
+    row = find_row(win, a.title)
+    if row is None:
+        raise DriverError(f"no row titled {a.title!r}")
+    if "expanded" in states(row):
+        return {"ok": True, "title": a.title, "before": True}
+    press_space(row, key=KEY_ENTER)
+    wait_for(lambda: "expanded" in states(row), a.timeout, f"{a.title!r} to expand")
+    return {"ok": True, "title": a.title, "before": False}
+
+
 def cmd_get_switch(a):
     win = get_window(a.timeout)
     row, widget = locate_switch(win, a.title)
@@ -478,7 +493,7 @@ def cmd_dump(a):
 
 
 COMMANDS = {"open": cmd_open, "close": cmd_close, "has-row": cmd_has_row,
-            "toggle": cmd_toggle, "get-switch": cmd_get_switch, "get-scale": cmd_get_scale,
+            "toggle": cmd_toggle, "expand": cmd_expand, "get-switch": cmd_get_switch, "get-scale": cmd_get_scale,
             "set-scale": cmd_set_scale, "dump": cmd_dump}
 
 
@@ -496,6 +511,7 @@ def parse(argv):
     p = sub.add_parser("has-row"); p.add_argument("title")
     p = sub.add_parser("toggle"); p.add_argument("title")
     p.add_argument("state", nargs="?", default="flip", choices=["on", "off", "flip"])
+    p = sub.add_parser("expand"); p.add_argument("title")
     p = sub.add_parser("get-switch"); p.add_argument("title")
     p = sub.add_parser("get-scale"); p.add_argument("row"); p.add_argument("scale")
     p = sub.add_parser("set-scale"); p.add_argument("row"); p.add_argument("scale"); p.add_argument("value")
